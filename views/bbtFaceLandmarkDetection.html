@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="face-api.js"></script>
+  <script src="js/commons.js"></script>
+  <script src="js/bbt.js"></script>
+  <script src="js/imageSelectionControls.js"></script>
+  <script src="js/faceDetectionControls.js"></script>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.100.2/css/materialize.css">
+  <script type="text/javascript" src="https://code.jquery.com/jquery-2.1.1.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.100.2/js/materialize.min.js"></script>
+</head>
+<body>
+  <div id="navbar"></div>
+  <div class="center-content page-container">
+    <div>
+      <div class="progress" id="loader">
+        <div class="indeterminate"></div>
+      </div>
+      <div class="row side-by-side">
+        <div class="center-content">
+          <div id="faceContainer"></div>
+          <div id="selectList"></div>
+        </div>
+      </div>
+
+
+      <img id="myImg" src="">
+      <input id="myFileUpload" type="file" onchange="uploadImage()" accept=".jpg, .jpeg, .png">
+    </div>
+  </div>
+
+  <script>
+    let drawLines = true
+    let landmarks
+    let currentImg
+
+    async function uploadImage() {
+      const imgFile = document.getElementById('myFileUpload').files[0]
+      // create an HTMLImageElement from a Blob
+      const currentImg = await faceapi.bufferToImage(imgFile)
+      document.getElementById('myImg').src = currentImg.src
+      const canvas = faceapi.createCanvasFromMedia(currentImg)
+      $('#faceContainer').empty()
+      $('#faceContainer').append(canvas)
+      new faceapi.draw.DrawFaceLandmarks(landmarks, { drawLines }).draw(canvas)
+      landmarks = await faceapi.detectFaceLandmarks(currentImg)
+      const landmarkPositions = landmarks.positions
+      // or get the positions of individual contours,
+      // only available for 68 point face ladnamrks (FaceLandmarks68)
+      const jawOutline = landmarks.getJawOutline()
+      const nose = landmarks.getNose()
+      const mouth = landmarks.getMouth()
+      const leftEye = landmarks.getLeftEye()
+      const rightEye = landmarks.getRightEye()
+      const leftEyeBbrow = landmarks.getLeftEyeBrow()
+      const rightEyeBrow = landmarks.getRightEyeBrow()
+      
+      // nose highest point
+      var maxNose = nose[0].y
+      for (var i = 0; i < 9; i++) {
+        if (nose[i].y > maxNose) {
+          maxNose = nose[i].y
+          noseX = nose[i].x
+        }
+      }
+      
+      // mouth average
+      var sum = 0
+      for (var i = 0; i < 20; i++) {
+        sum = sum + mouth[i].x
+      }
+      var averageXmouth = sum/20
+
+      sum = 0
+      for (var i = 0; i < 20; i++) {
+        sum = sum + mouth[i].y
+      }
+      var averageYmouth = sum/20
+      
+      // distance between nose and mouth
+      const dist = faceapi.euclideanDistance([noseX, maxNose], [averageXmouth, averageYmouth])
+      var sum = 0
+      for (var i = 0; i < 17; i++) {
+        sum = sum + jawOutline[i].x
+      }
+      var averageXjaw = sum/17
+
+      sum = 0
+      for (var i = 0; i < 17; i++) {
+        sum = sum + jawOutline[i].y
+      }
+      var averageYjaw = sum/17
+    
+
+      const distTwo = faceapi.euclideanDistance([averageXjaw, averageYjaw], [averageXmouth, averageYmouth])
+      
+      console.log("the distance from the top of the nose to the centre of the lips should be 1.618 times the distance from the centre of the lips to the chin")
+      console.log("yours is " + dist/distTwo )
+
+      // lip max 
+      var maxLip = mouth[0].y
+      for (var i = 0; i < 20; i++) {
+        if (mouth[i].y > maxLip) {
+          maxLip = mouth[i].y
+          mouthXmax = mouth[i].x
+        }  
+      }
+
+      var minLip = mouth[0].y
+      for (var i = 0; i < 20; i++) {
+        if (mouth[i].y < minLip) {
+          minLip = mouth[i].y
+          mouthXmin = mouth[i].x
+        }  
+      }
+
+      middleToUpperLip = faceapi.euclideanDistance([mouthXmax, maxLip], [averageXmouth, averageYmouth])
+      middleToLowerLip = faceapi.euclideanDistance([mouthXmin, minLip], [averageXmouth, averageYmouth])
+      console.log("the ideal ratio of upper to lower lip volume is 1:1.6 (the lower lip should have slightly more volume than the upper lip)")
+      console.log("yours is " + middleToUpperLip/middleToLowerLip )
+
+      averageOfDist = (dist/distTwo + middleToUpperLip/middleToLowerLip)/2
+      console.log("final score, more closer to 1.618, the better " + averageOfDist)
+    }
+
+    function onChangeDrawLines(e) {
+      drawLines = $(e.target).prop('checked')
+      redraw()
+    }
+
+    function redraw() {
+      const canvas = faceapi.createCanvasFromMedia(currentImg)
+      $('#faceContainer').empty()
+      $('#faceContainer').append(canvas)
+      new faceapi.draw.DrawFaceLandmarks(landmarks, { drawLines }).draw(canvas)
+    }
+
+    async function onSelectionChanged(uri) {
+      currentImg = await faceapi.fetchImage(uri)
+      landmarks = await faceapi.detectFaceLandmarks(currentImg)
+      const landmarkPositions = landmarks.positions
+      // or get the positions of individual contours,
+      // only available for 68 point face ladnamrks (FaceLandmarks68)
+      const jawOutline = landmarks.getJawOutline()
+      const nose = landmarks.getNose()
+      const mouth = landmarks.getMouth()
+      const leftEye = landmarks.getLeftEye()
+      const rightEye = landmarks.getRightEye()
+      const leftEyeBbrow = landmarks.getLeftEyeBrow()
+      const rightEyeBrow = landmarks.getRightEyeBrow()
+      
+      // nose highest point
+      var maxNose = nose[0].y
+      for (var i = 0; i < 9; i++) {
+        if (nose[i].y > maxNose) {
+          maxNose = nose[i].y
+          noseX = nose[i].x
+        }
+      }
+      
+      // mouth average
+      var sum = 0
+      for (var i = 0; i < 20; i++) {
+        sum = sum + mouth[i].x
+      }
+      var averageXmouth = sum/20
+
+      sum = 0
+      for (var i = 0; i < 20; i++) {
+        sum = sum + mouth[i].y
+      }
+      var averageYmouth = sum/20
+      
+      // distance between nose and mouth
+      const dist = faceapi.euclideanDistance([noseX, maxNose], [averageXmouth, averageYmouth])
+      var sum = 0
+      for (var i = 0; i < 17; i++) {
+        sum = sum + jawOutline[i].x
+      }
+      var averageXjaw = sum/17
+
+      sum = 0
+      for (var i = 0; i < 17; i++) {
+        sum = sum + jawOutline[i].y
+      }
+      var averageYjaw = sum/17
+    
+
+      const distTwo = faceapi.euclideanDistance([averageXjaw, averageYjaw], [averageXmouth, averageYmouth])
+      
+      console.log("the distance from the top of the nose to the centre of the lips should be 1.618 times the distance from the centre of the lips to the chin")
+      console.log("yours is " + dist/distTwo )
+
+      // lip max 
+      var maxLip = mouth[0].y
+      for (var i = 0; i < 20; i++) {
+        if (mouth[i].y > maxLip) {
+          maxLip = mouth[i].y
+          mouthXmax = mouth[i].x
+        }  
+      }
+
+      var minLip = mouth[0].y
+      for (var i = 0; i < 20; i++) {
+        if (mouth[i].y < minLip) {
+          minLip = mouth[i].y
+          mouthXmin = mouth[i].x
+        }  
+      }
+
+      middleToUpperLip = faceapi.euclideanDistance([mouthXmax, maxLip], [averageXmouth, averageYmouth])
+      middleToLowerLip = faceapi.euclideanDistance([mouthXmin, minLip], [averageXmouth, averageYmouth])
+      console.log("the ideal ratio of upper to lower lip volume is 1:1.6 (the lower lip should have slightly more volume than the upper lip)")
+      console.log("yours is " + middleToUpperLip/middleToLowerLip )
+
+      averageOfDist = (dist/distTwo + middleToUpperLip/middleToLowerLip)/2
+      console.log("final score, more closer to 1.618, the better " + averageOfDist)
+    
+      redraw()
+    }
+
+    async function run() {
+      await faceapi.loadFaceLandmarkModel('/')
+      $('#loader').hide()
+      await onSelectionChanged($('#selectList select').val())
+    }
+
+    $(document).ready(function() {
+      renderNavBar('#navbar', 'bbt_face_landmark_detection')
+      renderFaceImageSelectList(
+        '#selectList',
+        onSelectionChanged,
+        { className: 'sheldon', imageIdx: 1 }
+      )
+      run()
+    })
+
+  </script>
+
+</body>
+</html>
